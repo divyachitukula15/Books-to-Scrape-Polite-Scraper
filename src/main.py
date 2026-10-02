@@ -7,11 +7,15 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from models import Book
+
 
 BASE_URL = "https://books.toscrape.com/"
 START_URL = "https://books.toscrape.com/catalogue/page-1.html"
 
 CACHE_DIR = Path(__file__).parent.parent / "cache"
+RAW_FILE = Path(__file__).parent.parent / "raw-books.json"
+OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 USER_AGENT = "FlyRankInternship-A9/1.0"
 
@@ -47,7 +51,6 @@ def fetch_page(url, cache_file):
 
 def discover_books():
     all_book_urls = set()
-
     current_url = START_URL
 
     for page_number in range(1, 4):
@@ -123,6 +126,7 @@ def extract_book(url, source_page):
 
     if rating_element:
         rating_classes = rating_element.get("class", [])
+
         rating_text = next(
             (
                 item
@@ -150,37 +154,65 @@ def extract_book(url, source_page):
     }
 
 
-def main():
-    book_urls = discover_books()
+def normalize_price(price_text):
+    if not price_text:
+        return None
 
-    print()
-    print(f"Total books: {len(book_urls)}")
-    print()
+    cleaned = (
+        price_text
+        .replace("£", "")
+        .replace("Â", "")
+        .strip()
+    )
 
-    records = []
+    return float(cleaned)
 
-    for index, url in enumerate(book_urls, start=1):
-        print(f"[{index}/60] Extracting: {url}")
 
+def validate_and_store():
+    raw_records = json.loads(
+        RAW_FILE.read_text(encoding="utf-8")
+    )
+
+    valid_records = []
+    invalid_records = []
+
+    for record in raw_records:
         try:
-            record = extract_book(
-                url=url,
-                source_page=START_URL
+            record["price_gbp"] = normalize_price(
+                record["price_text"]
             )
 
-            records.append(record)
+            validated_book = Book.model_validate(record)
+
+            valid_records.append(
+                validated_book.model_dump(mode="json")
+            )
 
         except Exception as error:
-            print(f"ERROR: {error}")
+            invalid_records.append(
+                {
+                    "record": record,
+                    "error": str(error)
+                }
+            )
 
-        if index < len(book_urls):
-            time.sleep(0.5)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    output_file = Path(__file__).parent.parent / "raw-books.json"
+    books_file = OUTPUT_DIR / "books.json"
+    errors_file = OUTPUT_DIR.parent / "errors.json"
 
-    output_file.write_text(
+    books_file.write_text(
         json.dumps(
-            records,
+            valid_records,
+            indent=2,
+            ensure_ascii=False
+        ),
+        encoding="utf-8"
+    )
+
+    errors_file.write_text(
+        json.dumps(
+            invalid_records,
             indent=2,
             ensure_ascii=False
         ),
@@ -188,9 +220,12 @@ def main():
     )
 
     print()
-    print(f"Extracted records: {len(records)}")
-    print(f"Saved to: {output_file}")
+    print("VALIDATION COMPLETE")
+    print(f"Valid records: {len(valid_records)}")
+    print(f"Invalid records: {len(invalid_records)}")
+    print(f"Saved: {books_file}")
+    print(f"Saved: {errors_file}")
 
 
 if __name__ == "__main__":
-    main()
+    validate_and_store()
