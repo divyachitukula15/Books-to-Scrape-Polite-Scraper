@@ -1,0 +1,14 @@
+{
+  "start_time": "2026-10-02T18:37:14.332902+00:00",
+  "duration_seconds": 35.956261,
+  "fetched_pages": 0,
+  "cache_hits": 3,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": [
+    {
+      "url": "https://books.toscrape.com/catalogue/fake-page-99999/index.html",
+      "error": "HTTP 404"
+    }
+  ]
+}
